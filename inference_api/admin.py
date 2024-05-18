@@ -1,3 +1,5 @@
 from django.contrib import admin
+from .models import XRayImage, XRayPrediction
 
-# Register your models here.
+admin.site.register(XRayImage)
+admin.site.register(XRayPrediction)

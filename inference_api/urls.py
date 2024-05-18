@@ -20,8 +20,9 @@ from django.urls import path
 from . import views
 
 urlpatterns = [
-    path("", views.get_images),
+    path("", views.run_inference),
     path("get_images/", views.get_images),
+    path("get_predictions/", views.get_predictions_and_images),
     path("save_image/", views.save_image),
-    path("run_inference/", views.run_inference)
+    path("run_inference/", views.run_inference),
 ]

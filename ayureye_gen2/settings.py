@@ -39,7 +39,11 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "rest_framework",
+    "rest_framework.authtoken",
+    "debug_toolbar",
     "inference_api",
+    "accounts",
+    "phonenumber_field",
 ]
 
 MIDDLEWARE = [
@@ -50,6 +54,7 @@ MIDDLEWARE = [
     "django.contrib.auth.middleware.AuthenticationMiddleware",
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
+    "debug_toolbar.middleware.DebugToolbarMiddleware",
 ]
 
 ROOT_URLCONF = "ayureye_gen2.urls"
@@ -129,3 +134,9 @@ MEDIA_URL = "/media/"
 MEDIA_ROOT = BASE_DIR.joinpath("media")
 
 STATICFILES_DIRS = (BASE_DIR.joinpath("static"),)
+
+INTERNAL_IPS = [ # for Debug Toolbar
+    "127.0.0.1",
+]
+
+AUTH_USER_MODEL = 'accounts.UserProfile'

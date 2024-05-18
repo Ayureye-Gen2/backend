@@ -1,0 +1,41 @@
+### Get Request on the default homepage
+GET http://127.0.0.1:8000
+
+### Get Request on the images
+GET http://127.0.0.1:8000/inference/get_images
+
+### Post for signup
+POST http://127.0.0.1:8000/accounts/signup/
+Content-Type: application/json
+
+{"username": "bishal2", "password": "12345678", "email": "example@gmail.com"}
+
+### Post for guest login
+POST http://127.0.0.1:8000/accounts/login/
+Content-Type: application/json
+
+{"username": "bishal2", "password": "12345678"}
+
+### Get for validating token
+GET http://127.0.0.1:8000/accounts/test_token
+Content-Type: application/json
+Authorization: Token 80ddc5dadfaacd7cb34e85efa4f2de33959b972a
+
+### Post for signup
+POST http://127.0.0.1:8000/accounts/signup/
+Content-Type: application/json
+
+{"username": "patient_0", "password": "12345678", "email": "patient_0@gmail.com", "user_type": "Pt"}
+
+### delete existing patient
+DELETE http://127.0.0.1:8000/accounts/delete_account/
+Content-Type: application/json
+
+{"username": "patient_0", "password": "12345678"}
+
+
+### Post for patient login
+POST http://127.0.0.1:8000/accounts/login/
+Content-Type: application/json
+
+{"username": "patient_0", "password": "12345678"}

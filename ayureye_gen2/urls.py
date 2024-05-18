@@ -26,4 +26,7 @@ urlpatterns = [
     path("", views.about_project),
     path("admin/", admin.site.urls),
     path("inference/", include("inference_api.urls")),
+    path("accounts/", include("accounts.urls")),
+    path("api-auth/", include("rest_framework.urls", namespace="rest_framework")),
+    path("__debug__/", include("debug_toolbar.urls")),
 ] + static(settings.MEDIA_URL, document_root=settings.MEDIA_ROOT)
