@@ -26,7 +26,7 @@ SECRET_KEY = "django-insecure-4wzi#gk08l%y&qnl(1e=-9s$h!llv+_&bos1$do*o8%f^)j5p_
 # SECURITY WARNING: don't run with debug turned on in production!
 DEBUG = True
 
-ALLOWED_HOSTS = []
+ALLOWED_HOSTS = ['localhost', '127.0.0.1', '[::1]']
 
 
 # Application definition
@@ -44,6 +44,7 @@ INSTALLED_APPS = [
     "inference_api",
     "accounts",
     "phonenumber_field",
+    'corsheaders',
 ]
 
 MIDDLEWARE = [
@@ -55,6 +56,11 @@ MIDDLEWARE = [
     "django.contrib.messages.middleware.MessageMiddleware",
     "django.middleware.clickjacking.XFrameOptionsMiddleware",
     "debug_toolbar.middleware.DebugToolbarMiddleware",
+    'corsheaders.middleware.CorsMiddleware',
+]
+
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:3000",
 ]
 
 ROOT_URLCONF = "ayureye_gen2.urls"
