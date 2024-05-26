@@ -141,3 +141,9 @@ INTERNAL_IPS = [ # for Debug Toolbar
 ]
 
 AUTH_USER_MODEL = 'accounts.UserProfile'
+
+GRAPH_MODELS = {
+    'all_applications': False,
+    'group_models': True,
+    'app_labels': ["inference_api", "accounts"],
+}
