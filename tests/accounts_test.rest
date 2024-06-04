@@ -27,6 +27,12 @@ Content-Type: application/json
 
 {"username": "patient_0", "password": "12345678", "email": "patient_0@gmail.com", "user_type": "Pt"}
 
+### Doctor signup
+POST http://127.0.0.1:8000/accounts/signup/
+Content-Type: application/json
+
+{"username": "doctor_0", "password": "12345678", "email": "doctor_0@gmail.com", "user_type": "Dr"}
+
 ### delete existing patient
 DELETE http://127.0.0.1:8000/accounts/delete_account/
 Content-Type: application/json
