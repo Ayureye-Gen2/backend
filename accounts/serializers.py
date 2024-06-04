@@ -7,12 +7,16 @@ class UserSerializer(serializers.ModelSerializer):
         model = UserProfile
         fields = ["id", "username", "password", "email", "user_type"]
 
+        extra_kwargs = {
+            "password": {"write_only": True},
+        }
 
 class UserProfileSerializer(serializers.ModelSerializer):
     class Meta:
         model = UserProfile
         exclude = ("is_verified",)
         extra_kwargs = {
+            "password": {"write_only": True},
             "license_photo": {"required": False},
             "hospital_name": {"required": False},
             "user_type": {"required": True},
