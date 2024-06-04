@@ -15,7 +15,7 @@ class XRayImageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = XRayImage
-        fields = ["id", "name", "img_file", "upload_date", "predictions"]
+        fields = ["id", "name", "img_file", "upload_date", "patient", "predictions"]
 
 class XRayPredictedImageSerializer(serializers.ModelSerializer):
     predictions = serializers.PrimaryKeyRelatedField(
@@ -24,4 +24,4 @@ class XRayPredictedImageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = PredictedXRayImage
-        fields = ["id", "name", "img_file", "upload_date", "predictions"]
+        fields = ["id", "name", "img_file", "upload_date", "patient", "diagnosing_doctor", "predictions"]
