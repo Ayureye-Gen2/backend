@@ -9,33 +9,45 @@ from django.core.files.storage import FileSystemStorage
 from django.db.models import OuterRef, Subquery
 from django.shortcuts import render
 
-from keras.models import Model, load_model
-from keras.utils import img_to_array, load_img
-
 from rest_framework import status
-from rest_framework.authentication import (SessionAuthentication,
-                                           TokenAuthentication)
-from rest_framework.decorators import (api_view, authentication_classes,
-                                       permission_classes)
+from rest_framework.authentication import SessionAuthentication, TokenAuthentication
+from rest_framework.decorators import (
+    api_view,
+    authentication_classes,
+    permission_classes,
+)
 from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.utils.serializer_helpers import ReturnDict, ReturnList
 
-from .models import XRayImage, XRayPrediction
-from .serializers import XRayImageSerializer, XRayPredictionSerializer
+from .models import XRayImage, XRayPrediction, PredictedXRayImage
+from .serializers import (
+    XRayImageSerializer,
+    XRayPredictionSerializer,
+    XRayPredictedImageSerializer,
+)
 
 from accounts.permissions import PatientPermission, DoctorPermission
 from accounts.decorators import authenticated_user
 
-# constants
-IMG_HEIGHT = 512
-IMG_WIDTH = 512
+from enum import Enum
+import cv2
 
-BASE_DIR: Path = settings.BASE_DIR
-MODELS_PATH: Path = BASE_DIR.joinpath("models")
+from .detect import initialize_model, get_boxes_and_filled_image
+import os
 
-MODEL_NAME = "classification_model"
-MODEL: Model | None = None  # load_model(MODELS_PATH.joinpath(MODEL_NAME))
+initialize_model()
+from .detect import class_names
+
+
+class ModelType(Enum):
+    NONE = 0
+    DETECTION = 1
+    SEGMENTATION = 2
+
+
+IMAGE_SIZE = 640
+CONFIDENCE_THRESHOLD = 0.2
 
 
 @api_view(["GET"])
@@ -69,9 +81,14 @@ def get_predictions_and_images(request):
     return Response(x_ray_prediction_serializer.data)
 
 
-def upload_image(img_file: File) -> None | tuple[int, str, str, str, str]:
+def upload_image(
+    img_file: File, type: str = "image"
+) -> None | tuple[int, str, str, str, str]:
     """
     Saves the given image in the server.
+
+    For saving image, the actual file is required
+    for saving prediction, the uri is required
 
     Returns
     -------
@@ -84,12 +101,18 @@ def upload_image(img_file: File) -> None | tuple[int, str, str, str, str]:
         base_url=settings.MEDIA_URL + "images/",
     )
 
-    # creating a data to save to database
     request_data = {"name": img_file.name, "img_file": img_file}
 
-    x_ray_image_serializer = XRayImageSerializer(data=request_data)
+    if type == "image":
+        x_ray_image_serializer = XRayImageSerializer(data=request_data)
+    elif type == "prediction":
+        x_ray_image_serializer = XRayPredictedImageSerializer(data=request_data)
+    else:
+        raise NotImplementedError  # for debugging
 
-    if x_ray_image_serializer.is_valid(raise_exception=True):
+    data_valid = x_ray_image_serializer.is_valid()
+
+    if data_valid:
         x_ray_image_serializer.save()
 
         img_id = x_ray_image_serializer.data["id"]
@@ -105,9 +128,51 @@ def upload_image(img_file: File) -> None | tuple[int, str, str, str, str]:
         return None
 
 
+def upload_prediction(
+    prediction: dict,
+    original_image_id: int,
+    image_name: str,
+    predicted_image: np.ndarray,
+) -> tuple[bool, str]:
+    filename = f"predicted_{image_name}"
+    success = cv2.imwrite(filename, predicted_image)
+
+    if success:
+        with open(filename, "rb") as img_file:
+            img_id, file_name, path, url, upload_date = upload_image(
+                File(img_file), type="prediction"
+            )
+
+        if os.path.exists(
+            filename
+        ):  # since upload_image creates new file, deleting the old one
+            os.remove(filename)
+
+        for i, cls in enumerate(prediction["infection_types"]):
+
+            request_data = {
+                "prediction_type": prediction["prediction_type"],
+                "infection_type": cls,
+                "confidence": prediction["confidence"][i],
+                "bounding_box_coordinates": prediction["bounding_box_coordinates"][i],
+                "original_image": original_image_id,
+                "predicted_image": img_id,
+            }
+
+            x_ray_prediction_serializer = XRayPredictionSerializer(data=request_data)
+            if x_ray_prediction_serializer.is_valid(raise_exception=True):
+                x_ray_prediction_serializer.save()
+
+        return True, url
+
+    return False, ""
+
+
 @api_view(["POST"])
 @authentication_classes([SessionAuthentication, TokenAuthentication])
-@permission_classes([DoctorPermission | PatientPermission]) # both patient and doctor and save images
+@permission_classes(
+    [DoctorPermission | PatientPermission]
+)  # both patient and doctor and save images
 def save_image(request):
     """
     The request must contain a image file
@@ -131,51 +196,69 @@ def save_image(request):
     )
 
 
-def predict(model: Model, img: np.ndarray):
+def run_inference_on_image(
+    file_path, model_type: ModelType = ModelType.DETECTION
+) -> tuple[bool, dict | list[tuple[bool, dict, np.ndarray]]]:
     """
-    Run inference on the image and return the sanitized predictions
+    Only detection case is implemented for now
 
-    one possibility might be.
-    {
-        {
-            "infection": "infection1"
-            "co-ordinates": ["(x1, y1)", "(x2, y2)", ...]
-        },
-        {
-            "infection": "infection2"
-            "co-ordinates": ["(x3, y3)", "(x4, y4)", ...]
-        }
+    Returns
+    --------
+    The bool is the result of whole inference, it is true if inference ran successfully false otherwise. \n
+    The dictionary contains the error message if inference couldn't be run. \n
 
-    }
-
-    todo: implement this
+    If inference ran successfuly, the list contains a tuples whose first value indicates where there was any detection and
+    the dictionary has the values of the prediction if there was any.\n
+    The plotted image is returned with the annotations if there was any predictions else, the same image is returned
 
     """
-    predictions = model.predict(img)
 
-    # sanitize predictions
-
-    return "Nothing", "Nothing", 0
-
-
-def run_inference_on_image(file_path, image_height=IMG_HEIGHT, image_width=IMG_WIDTH):
-
-    original = load_img(file_path, target_size=(image_width, image_height))
-    numpy_image = img_to_array(original)
-
-    if MODEL is not None:
-        label, remarks, confidence = predict(MODEL, numpy_image)
-
-        # save the predictions corresponding to the image
-
-    else:
-        label, remarks, confidence = (
-            "None",
-            "Couldn't find the model to run inference",
-            0,
+    if model_type == ModelType.DETECTION:
+        success, predictions = get_boxes_and_filled_image(
+            file_path, IMAGE_SIZE, CONFIDENCE_THRESHOLD
         )
 
-    return label, remarks, confidence
+        if success:
+
+            data: list[tuple[bool, dict]] = []
+            for bbox, plotted_image in predictions:
+                cls = bbox.cls.detach().cpu().numpy()
+                cls_names = [class_names[int(i)] for i in cls]
+                confs = bbox.conf.detach().cpu().numpy()
+
+                xyxys = bbox.xyxy.detach().cpu().numpy()
+
+                plotted_image = cv2.resize(plotted_image, (IMAGE_SIZE, IMAGE_SIZE))
+
+                if not len(cls):
+                    data.append((0, {}))
+                else:
+                    data.append(
+                        (
+                            True,
+                            {
+                                "prediction_type": "DET",
+                                "infection_types": cls_names,
+                                "confidence": confs,
+                                "bounding_box_coordinates": [
+                                    { # since this is denormalized values, we can cast it as int
+                                        "x_min": int(xyxy[0]),
+                                        "y_min": int(xyxy[1]),
+                                        "x_max": int(xyxy[2]),
+                                        "y_max": int(xyxy[3]),
+                                    }
+                                    for xyxy in xyxys
+                                ],
+                            },  
+                            plotted_image,
+                        )
+                    )
+
+            return (True, data)
+
+        return (False, {"msg": "Failed to run inference."})
+
+    return (False, {"msg": "Only detection case is implemented."})
 
 
 @api_view(["POST"])
@@ -189,10 +272,29 @@ def run_inference(request):
     """
 
     (image_id, image_name, file_path, url, _) = upload_image(request.FILES["image"])
-    label, remarks, confidence = run_inference_on_image(file_path)
-    response_data = {
-        "label": label,
-        "remarks": remarks,
-        "confidence": confidence,
-    }
-    return Response(response_data, status=status.HTTP_202_ACCEPTED)
+    success, data = run_inference_on_image(file_path)
+
+    if not success:
+        return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+    if not data[0] or not data[0][0]:  # there is only one detection
+        return Response({"msg": "No Detections"})
+
+    if success:
+        pred, image = data[0][1], data[0][2]
+
+        upload_success, url = upload_prediction(pred, image_id, image_name, image)
+
+        if not upload_success:
+            return Response({"msg": "Couldn't Upload Prediction", "data": data[0]})
+        
+        detections = []
+
+        if not isinstance(data, list):
+            return Response({"msg": "Got invalid predictions"})
+
+        for cls_available, prediction_data, _ in data:
+            if cls_available:
+                detections.append(prediction_data)
+
+        return Response({"detections": detections, "img_file": url})
