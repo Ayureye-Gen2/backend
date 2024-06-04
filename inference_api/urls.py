@@ -23,6 +23,9 @@ urlpatterns = [
     path("", views.run_inference),
     path("get_images/", views.get_images),
     path("get_predictions/", views.get_predictions_and_images),
+    path("get_patients/", views.get_patients),
+    path("get_images_for_a_patient/", views.get_images_for_a_patient),
+    path("get_predictions_for_a_patient/", views.get_predictions_for_a_patient),
     path("save_image/", views.save_image),
     path("run_inference/", views.run_inference),
 ]

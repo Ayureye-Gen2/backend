@@ -20,7 +20,8 @@ from rest_framework.permissions import IsAuthenticated
 from rest_framework.response import Response
 from rest_framework.utils.serializer_helpers import ReturnDict, ReturnList
 
-from .models import XRayImage, XRayPrediction, PredictedXRayImage
+from accounts.serializers import UserSerializer
+from .models import XRayImage, XRayPrediction, PredictedXRayImage, UserProfile
 from .serializers import (
     XRayImageSerializer,
     XRayPredictionSerializer,
@@ -68,6 +69,70 @@ def get_images(request):
 @api_view(["GET"])
 @authentication_classes([SessionAuthentication, TokenAuthentication])
 @permission_classes([DoctorPermission])
+def get_patients(request):
+    """
+    Patients for a particular doctor
+    """
+    doctor = request.user
+    patients = UserProfile.objects.filter(
+        id__in=Subquery(
+            PredictedXRayImage.objects.filter(diagnosing_doctor=doctor.pk).values(
+                "patient"
+            )
+        )
+    )
+
+    user_serializer = UserSerializer(patients, many=True)
+
+    return Response(user_serializer.data)
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication, TokenAuthentication])
+@permission_classes([DoctorPermission | PatientPermission])
+def get_images_for_a_patient(request):
+    """
+    Images of a patient.
+
+    If doctor is requesting this, a patient id must be provided
+    """
+    if request.user.user_type == "Pt":
+        patient = request.user
+        patient_pk = patient.pk
+    else:
+        patient_pk = request.query_params["patient_id"]
+    
+    images = XRayImage.objects.filter(patient=patient_pk)
+
+    x_ray_image_serializer = XRayImageSerializer(images, many=True)
+
+    return Response(x_ray_image_serializer.data)
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication, TokenAuthentication])
+@permission_classes([DoctorPermission | PatientPermission])
+def get_predictions_for_a_patient(request):
+    """
+    Predictions of a patient.
+
+    If doctor is requesting this, a patient id must be provided
+    """
+    if request.user.user_type == "Pt":
+        patient = request.user
+        patient_pk = patient.pk
+    else:
+        patient_pk = request.query_params["patient_id"]
+    
+    images = PredictedXRayImage.objects.filter(patient=patient_pk)
+
+    x_ray_image_serializer = XRayPredictedImageSerializer(images, many=True)
+
+    return Response(x_ray_image_serializer.data)
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication, TokenAuthentication])
+@permission_classes([DoctorPermission])
 def get_predictions_and_images(request):
     """
     Returns the saved predictions along with the associated images.
@@ -82,7 +147,7 @@ def get_predictions_and_images(request):
 
 
 def upload_image(
-    img_file: File, type: str = "image"
+    img_file: File, patient_id: int, type: str = "image", doctor_id: int | None = None
 ) -> None | tuple[int, str, str, str, str]:
     """
     Saves the given image in the server.
@@ -101,11 +166,11 @@ def upload_image(
         base_url=settings.MEDIA_URL + "images/",
     )
 
-    request_data = {"name": img_file.name, "img_file": img_file}
-
     if type == "image":
+        request_data = {"name": img_file.name, "img_file": img_file, "patient": patient_id}
         x_ray_image_serializer = XRayImageSerializer(data=request_data)
     elif type == "prediction":
+        request_data = {"name": img_file.name, "img_file": img_file, "patient": patient_id, "diagnosing_doctor": doctor_id}
         x_ray_image_serializer = XRayPredictedImageSerializer(data=request_data)
     else:
         raise NotImplementedError  # for debugging
@@ -133,6 +198,8 @@ def upload_prediction(
     original_image_id: int,
     image_name: str,
     predicted_image: np.ndarray,
+    patient_id: int,
+    doctor_id: int
 ) -> tuple[bool, str]:
     filename = f"predicted_{image_name}"
     success = cv2.imwrite(filename, predicted_image)
@@ -140,7 +207,7 @@ def upload_prediction(
     if success:
         with open(filename, "rb") as img_file:
             img_id, file_name, path, url, upload_date = upload_image(
-                File(img_file), type="prediction"
+                File(img_file),patient_id, "prediction", doctor_id
             )
 
         if os.path.exists(
@@ -175,7 +242,7 @@ def upload_prediction(
 )  # both patient and doctor and save images
 def save_image(request):
     """
-    The request must contain a image file
+    The request must contain a image file as well a the primary key of the associated patient
 
     Both the doctors and patients are allowed to save a image
     """
@@ -241,7 +308,7 @@ def run_inference_on_image(
                                 "infection_types": cls_names,
                                 "confidence": confs,
                                 "bounding_box_coordinates": [
-                                    { # since this is denormalized values, we can cast it as int
+                                    {  # since this is denormalized values, we can cast it as int
                                         "x_min": int(xyxy[0]),
                                         "y_min": int(xyxy[1]),
                                         "x_max": int(xyxy[2]),
@@ -249,7 +316,7 @@ def run_inference_on_image(
                                     }
                                     for xyxy in xyxys
                                 ],
-                            },  
+                            },
                             plotted_image,
                         )
                     )
@@ -271,7 +338,24 @@ def run_inference(request):
     Any logged in users can run inference
     """
 
-    (image_id, image_name, file_path, url, _) = upload_image(request.FILES["image"])
+    patient_id = None
+    doctor_id = None
+    if request.user.user_type == "Pt":
+        patient_id = request.user.pk
+    
+    if request.user.user_type == "Dr":
+        doctor_id = request.user.pk
+
+    if patient_id is None:
+        patient_id = request.data.get("patient_id", None)
+    
+    if doctor_id is None:
+        doctor_id = request.data.get("doctor_id", None)
+
+    if patient_id is None or doctor_id is None:
+        return Response({"msg": "Required parameters 'patient_id' and 'doctor_id'"})
+
+    (image_id, image_name, file_path, url, _) = upload_image(request.FILES["image"], patient_id=patient_id)
     success, data = run_inference_on_image(file_path)
 
     if not success:
@@ -287,7 +371,7 @@ def run_inference(request):
 
         if not upload_success:
             return Response({"msg": "Couldn't Upload Prediction", "data": data[0]})
-        
+
         detections = []
 
         if not isinstance(data, list):
