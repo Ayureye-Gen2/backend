@@ -16,7 +16,7 @@ class XRayImage(models.Model):
     upload_date = models.DateTimeField(auto_now_add=True)
     patient = models.ForeignKey(
         UserProfile,
-        null=True,  # this must be removed in the future
+        null=False,
         related_name="patient_xray_image",
         on_delete=models.CASCADE,
         limit_choices_to={
@@ -39,7 +39,7 @@ class PredictedXRayImage(models.Model):
     upload_date = models.DateTimeField(auto_now_add=True)
     patient = models.ForeignKey(
         UserProfile,
-        null=True,  # this must be removed in the future
+        null=False,
         related_name="patient_predicted_xray_image",
         on_delete=models.CASCADE,
         limit_choices_to={
@@ -48,7 +48,7 @@ class PredictedXRayImage(models.Model):
     )  # remove the associated image if user is removed
     diagnosing_doctor = models.ForeignKey(
         UserProfile,
-        null=True,
+        null=False,
         related_name="doctor_predicted_xray_image",
         on_delete=models.DO_NOTHING,
         limit_choices_to={
