@@ -1,4 +1,4 @@
-from .models import XRayImage, XRayPrediction
+from .models import XRayImage, XRayPrediction, PredictedXRayImage
 from rest_framework import serializers
 
 
@@ -15,4 +15,13 @@ class XRayImageSerializer(serializers.ModelSerializer):
 
     class Meta:
         model = XRayImage
+        fields = ["id", "name", "img_file", "upload_date", "predictions"]
+
+class XRayPredictedImageSerializer(serializers.ModelSerializer):
+    predictions = serializers.PrimaryKeyRelatedField(
+        many=True, queryset=XRayPrediction.objects.all(), allow_null=True, required=False
+    )
+
+    class Meta:
+        model = PredictedXRayImage
         fields = ["id", "name", "img_file", "upload_date", "predictions"]
