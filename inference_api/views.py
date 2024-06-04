@@ -140,7 +140,7 @@ def get_predictions_and_images(request):
 
     todo: make it only accessible by doctors
     """
-    images = XRayPrediction.objects.order_by("image")
+    images = XRayPrediction.objects.order_by("original_image")
     x_ray_prediction_serializer = XRayPredictionSerializer(images, many=True)
 
     return Response(x_ray_prediction_serializer.data)
@@ -356,7 +356,7 @@ def run_inference(request):
         return Response({"msg": "Required parameters 'patient_id' and 'doctor_id'"})
 
     (image_id, image_name, file_path, url, _) = upload_image(request.FILES["image"], patient_id=patient_id)
-    success, data = run_inference_on_image(file_path)
+    success, data = run_inference_on_image(file_path.replace(" ", "_")) # the spaces are replaces by _
 
     if not success:
         return Response(data, status=status.HTTP_400_BAD_REQUEST)
