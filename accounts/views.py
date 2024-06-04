@@ -12,7 +12,7 @@ from rest_framework.response import Response
 from rest_framework import status
 from rest_framework.authtoken.models import Token
 
-from .serializers import UserSerializer
+from .serializers import UserSerializer, UserProfileSerializer
 
 
 @api_view(["POST"])
@@ -52,3 +52,18 @@ def remove_user(request):
 @permission_classes([IsAuthenticated])
 def test_token(request):
     return Response("passed!")
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication, TokenAuthentication])
+@permission_classes([IsAuthenticated])
+def user_profile(request):
+    pk = request.user.pk
+
+    if pk is None:
+        return Response({"msg": "Primary key is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+    user = get_object_or_404(UserProfile, id=pk)
+
+    user_profile_serializer = UserProfileSerializer(user)
+
+    return Response(user_profile_serializer.data)
