@@ -80,8 +80,8 @@ class XRayPrediction(models.Model):
         max_length=1000
     )  # todo: need to check the max length
     original_image = models.ForeignKey(
-        XRayImage, related_name="original_image_to_predictions", on_delete=models.DO_NOTHING
+        XRayImage, related_name="original_image_to_predictions", on_delete=models.CASCADE
     )
     predicted_image = models.ForeignKey(
-        PredictedXRayImage, related_name="predicted_image_to_predictions", on_delete=models.DO_NOTHING, null=True
+        PredictedXRayImage, related_name="predicted_image_to_predictions", on_delete=models.CASCADE
     )
