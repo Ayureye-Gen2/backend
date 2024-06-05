@@ -127,7 +127,7 @@ def get_images_for_a_patient(request):
 @permission_classes([DoctorPermission | PatientPermission])
 def get_predictions_for_a_patient(request):
     """
-    Predictions of a patient.
+    Predictions of a patient. (NOt Required)
 
     If doctor is requesting this, a patient id must be provided
     """
@@ -157,7 +157,13 @@ def get_predictions_and_images(request):
     images = XRayPrediction.objects.order_by("original_image")
     x_ray_prediction_serializer = XRayPredictionSerializer(images, many=True)
 
-    return Response(x_ray_prediction_serializer.data)
+    return_data = x_ray_prediction_serializer.data
+
+    for data in return_data:
+        data["original_image_file"] = XRayImage.objects.filter(pk=data["original_image"]).values("img_file").get()["img_file"]
+        data["predicted_image_file"] = PredictedXRayImage.objects.filter(pk=data["predicted_image"]).values("img_file").get()["img_file"]
+
+    return Response(return_data)
 
 
 def upload_image(
@@ -367,7 +373,7 @@ def run_inference(request):
         doctor_id = request.data.get("doctor_id", None)
 
     if patient_id is None or doctor_id is None:
-        return Response({"msg": "Required parameters 'patient_id' and 'doctor_id'"})
+        return Response({"detected": False, "msg": "Required parameters 'patient_id' and 'doctor_id'"})
 
     (image_id, image_name, file_path, url, _) = upload_image(request.FILES["image"], patient_id=patient_id)
     success, data = run_inference_on_image(file_path.replace(" ", "_")) # the spaces are replaces by _
@@ -376,7 +382,7 @@ def run_inference(request):
         return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
     if not data[0] or not data[0][0]:  # there is only one detection
-        return Response({"msg": "No Detections", "img_file": url})
+        return Response({"detected": False, "msg": "No Detections", "img_file": url})
 
     if success:
         pred, image = data[0][1], data[0][2]
@@ -386,16 +392,16 @@ def run_inference(request):
         detections = []
 
         if not isinstance(data, list):
-            return Response({"msg": "Got invalid predictions"})
+            return Response({"detected": False, "msg": "Got invalid predictions"})
 
         for cls_available, prediction_data, _ in data:
             if cls_available:
                 detections.append(prediction_data)
 
         if not upload_success:
-            return Response({"msg": "Couldn't Upload Prediction", "detections": detections})
+            return Response({"detected": True, "msg": "Couldn't Upload Prediction", "detections": detections})
 
-        return Response({"detections": detections, "img_file": url})
+        return Response({"detected": True, "detections": detections, "img_file": url})
 
 
 @api_view(["POST"])
@@ -425,14 +431,14 @@ def run_inference_on_already_uploaded_image(request):
         doctor_id = request.data.get("doctor_id", None)
 
     if patient_id is None or doctor_id is None:
-        return Response({"msg": "Required parameters 'patient_id' and 'doctor_id'"}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detected": False, "msg": "Required parameters 'patient_id' and 'doctor_id'"}, status=status.HTTP_400_BAD_REQUEST)
 
     original_image_id = None
 
     original_image_id = request.data.get("original_image_id", None)
 
     if original_image_id is None:
-        return Response({"msg": "Required parameters 'original_image_id' ."}, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detected": False, "msg": "Required parameters 'original_image_id' ."}, status=status.HTTP_400_BAD_REQUEST)
 
     query_ret = XRayImage.objects.filter(pk=original_image_id).values("id", "name", "img_file").get() # there should be only one
     image_id, image_name, original_image_url = query_ret["id"], query_ret["name"], query_ret["img_file"]
@@ -446,10 +452,10 @@ def run_inference_on_already_uploaded_image(request):
     success, data = run_inference_on_image(file_path.replace(" ", "_")) # the spaces are replaces by _
 
     if not success:
-        return Response(data, status=status.HTTP_400_BAD_REQUEST)
+        return Response({"detected": False, "detections": data}, status=status.HTTP_400_BAD_REQUEST)
 
     if not data[0] or not data[0][0]:  # there is only one detection
-        return Response({"msg": "No Detections", "img_file": url})
+        return Response({"detected": False, "msg": "No Detections", "img_file": url})
 
     if success:
         pred, image = data[0][1], data[0][2]
@@ -459,13 +465,13 @@ def run_inference_on_already_uploaded_image(request):
         detections = []
 
         if not isinstance(data, list):
-            return Response({"msg": "Got invalid predictions"})
+            return Response({"detected": False, "msg": "Got invalid predictions"})
 
         for cls_available, prediction_data, _ in data:
             if cls_available:
                 detections.append(prediction_data)
 
         if not upload_success:
-            return Response({"msg": "Couldn't Upload Prediction", "detections": detections})
+            return Response({"detected": True, "msg": "Couldn't Upload Prediction", "detections": detections})
 
-        return Response({"detections": detections, "img_file": url})
+        return Response({"detected": True, "detections": detections, "img_file": url})
