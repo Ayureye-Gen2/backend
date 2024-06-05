@@ -209,7 +209,7 @@ def upload_image(
         ]  # because of relative paths and FileSystemStorage's basepath, only the image identifier is required
         upload_date = x_ray_image_serializer.data["upload_date"]
 
-        url = fs.url(file_path)
+        url = fs.url(file_path)[len(settings.MEDIA_URL):] # don't return /media/
 
         return img_id, img_file.name, fs.path(file_path), url, upload_date
     else:
