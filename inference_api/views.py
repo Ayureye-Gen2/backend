@@ -71,6 +71,20 @@ def get_images(request):
 @permission_classes([DoctorPermission])
 def get_patients(request):
     """
+    All of the patients
+    """
+    patients = UserProfile.objects.filter(user_type="Pt")
+
+    user_serializer = UserSerializer(patients, many=True)
+
+    return Response(user_serializer.data)
+
+
+@api_view(["GET"])
+@authentication_classes([SessionAuthentication, TokenAuthentication])
+@permission_classes([DoctorPermission])
+def get_doctor_specific_patients(request):
+    """
     Patients for a particular doctor
     """
     doctor = request.user
