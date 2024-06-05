@@ -347,9 +347,9 @@ def run_inference_on_image(
 @permission_classes([IsAuthenticated])
 def run_inference(request):
     """
-    todo: integrate predictions with the predictions model
-
     Any logged in users can run inference
+
+    This version is for running inference on a new image given as a FILE
     """
 
     patient_id = None
@@ -381,7 +381,80 @@ def run_inference(request):
     if success:
         pred, image = data[0][1], data[0][2]
 
-        upload_success, url = upload_prediction(pred, image_id, image_name, image)
+        upload_success, url = upload_prediction(pred, image_id, image_name, image, patient_id, doctor_id)
+
+        detections = []
+
+        if not isinstance(data, list):
+            return Response({"msg": "Got invalid predictions"})
+
+        for cls_available, prediction_data, _ in data:
+            if cls_available:
+                detections.append(prediction_data)
+
+        if not upload_success:
+            return Response({"msg": "Couldn't Upload Prediction", "detections": detections})
+
+        return Response({"detections": detections, "img_file": url})
+
+
+@api_view(["POST"])
+@authentication_classes([SessionAuthentication, TokenAuthentication])
+@permission_classes([DoctorPermission])
+def run_inference_on_already_uploaded_image(request):
+    """
+
+   Only doctors can perform this
+
+   This version is for running inference on already uploaded image given a primary key for the uploaded image
+   or the uri
+    """
+
+    patient_id = None
+    doctor_id = None
+    if request.user.user_type == "Pt":
+        patient_id = request.user.pk
+    
+    if request.user.user_type == "Dr":
+        doctor_id = request.user.pk
+
+    if patient_id is None:
+        patient_id = request.data.get("patient_id", None)
+    
+    if doctor_id is None:
+        doctor_id = request.data.get("doctor_id", None)
+
+    if patient_id is None or doctor_id is None:
+        return Response({"msg": "Required parameters 'patient_id' and 'doctor_id'"}, status=status.HTTP_400_BAD_REQUEST)
+
+    original_image_id = None
+
+    original_image_id = request.data.get("original_image_id", None)
+
+    if original_image_id is None:
+        return Response({"msg": "Required parameters 'original_image_id' ."}, status=status.HTTP_400_BAD_REQUEST)
+
+    query_ret = XRayImage.objects.filter(pk=original_image_id).values("id", "name", "img_file").get() # there should be only one
+    image_id, image_name, original_image_url = query_ret["id"], query_ret["name"], query_ret["img_file"]
+
+    fs = FileSystemStorage(  # using this folder as the images are stored inside /media/images
+        location=settings.MEDIA_ROOT.joinpath("images"),
+        base_url=settings.MEDIA_URL + "images/",
+    )
+
+    file_path = fs.path(image_name)
+    success, data = run_inference_on_image(file_path.replace(" ", "_")) # the spaces are replaces by _
+
+    if not success:
+        return Response(data, status=status.HTTP_400_BAD_REQUEST)
+
+    if not data[0] or not data[0][0]:  # there is only one detection
+        return Response({"msg": "No Detections", "img_file": url})
+
+    if success:
+        pred, image = data[0][1], data[0][2]
+
+        upload_success, url = upload_prediction(pred, image_id, image_name, image, patient_id, doctor_id)
 
         detections = []
 
