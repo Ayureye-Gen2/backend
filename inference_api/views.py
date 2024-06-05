@@ -246,7 +246,7 @@ def save_image(request):
 
     Both the doctors and patients are allowed to save a image
     """
-    upload_return = upload_image(request.FILES["image"])
+    upload_return = upload_image(request.FILES["image"], request.data["patient_id"])
 
     if upload_return is None:
         return Response(
@@ -362,15 +362,12 @@ def run_inference(request):
         return Response(data, status=status.HTTP_400_BAD_REQUEST)
 
     if not data[0] or not data[0][0]:  # there is only one detection
-        return Response({"msg": "No Detections"})
+        return Response({"msg": "No Detections", "img_file": url})
 
     if success:
         pred, image = data[0][1], data[0][2]
 
         upload_success, url = upload_prediction(pred, image_id, image_name, image)
-
-        if not upload_success:
-            return Response({"msg": "Couldn't Upload Prediction", "data": data[0]})
 
         detections = []
 
@@ -380,5 +377,8 @@ def run_inference(request):
         for cls_available, prediction_data, _ in data:
             if cls_available:
                 detections.append(prediction_data)
+
+        if not upload_success:
+            return Response({"msg": "Couldn't Upload Prediction", "detections": detections})
 
         return Response({"detections": detections, "img_file": url})
