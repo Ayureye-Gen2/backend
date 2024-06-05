@@ -122,7 +122,7 @@ def get_images_for_a_patient(request):
 
     return Response(x_ray_image_serializer.data)
 
-@api_view(["GET"])
+@api_view(["POST", "GET"])
 @authentication_classes([SessionAuthentication, TokenAuthentication])
 @permission_classes([DoctorPermission | PatientPermission])
 def get_predictions_for_a_patient(request):
@@ -135,7 +135,10 @@ def get_predictions_for_a_patient(request):
         patient = request.user
         patient_pk = patient.pk
     else:
-        patient_pk = request.query_params["patient_id"]
+        if request.method == 'GET':
+            patient_pk = request.query_params["patient_id"]
+        elif request.method == 'POST':
+            patient_pk = request.data["patient_id"]
     
     images = PredictedXRayImage.objects.filter(patient=patient_pk)
 
